@@ -337,13 +337,32 @@ async def chat_request(message,stream=False):
 async def generate_qwen_vl_prompt_with_deepseek(alert_text, description_text):
     """
     输入异常描述和视频内容描述，调用deepseek生成千问VL目标检测prompt
+    要求bboxes中的class名称与description_text中的实体词语严格一致。
     """
-    system_prompt = ENTITY_TO_QWEN_PROMPT_SYSTEM
+    system_prompt = ENTITY_TO_QWEN_PROMPT_SYSTEM + "\n请确保你输出的所有标注框class名称，必须与视频内容描述（description_text）中的实体词语严格一致，便于前端高亮和交互。不要使用泛化词或同义词，直接用描述中的原文。"
     user_prompt = f"异常信息：{alert_text}\n视频内容描述：{description_text}"
     message = f"<|system|>{system_prompt}\n<|user|>{user_prompt}"
     prompt = await chat_request(message)
     print("生成的qwen目标检测提示词是",prompt)
     return prompt
+
+
+def extract_entity_mapping(description_text, bboxes):
+    """
+    根据description_text和bboxes，生成class与描述中句子的对应关系mapping。
+    返回格式: {class: [出现的句子或片段, ...]}
+    """
+    import re
+    mapping = {}
+    for obj in bboxes:
+        cls = obj.get('class', None)
+        if not cls:
+            continue
+        # 在description_text中查找所有包含class词语的句子
+        sentences = re.split(r'[。！？\n]', description_text)
+        related = [s for s in sentences if cls in s]
+        mapping[cls] = related if related else []
+    return mapping
 
 
 def draw_and_save_boxes(img_path, bboxes, label_img_path, label_json_path, entity=None):

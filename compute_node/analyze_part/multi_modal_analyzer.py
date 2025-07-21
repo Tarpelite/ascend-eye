@@ -18,7 +18,7 @@ import datetime
 import asyncio
 import re
 
-from utility import video_chat_async,chat_request,insert_txt,video_chat_async_limit_frame,generate_qwen_vl_prompt_with_deepseek, draw_and_save_boxes, qwenvl_warning_img_detection
+from utility import video_chat_async,chat_request,insert_txt,video_chat_async_limit_frame,generate_qwen_vl_prompt_with_deepseek, draw_and_save_boxes, qwenvl_warning_img_detection, extract_entity_mapping
 from config import RAGConfig
 
 # 从配置文件加载提示词
@@ -142,13 +142,16 @@ class MultiModalAnalyzer:
 
             # 2. 用千问vl对异常截图做目标检测，保存标注图片和json
             label_img_name, label_json_name, bboxes = await qwenvl_warning_img_detection(img_path, prompt4detect, current_time)
+            # 生成mapping字段
+            mapping = extract_entity_mapping(description, bboxes)
             response = {"alert":f"<span style=\"color:red;\">{alert}</span>",
                     "description":f' 当前10秒监控消息描述：\n{description}\n\n 历史监控内容:\n{Recursive_summary}',
                     "video_file_name":f"warning_video/warning_video/{file_str}.mp4",
                     "picture_file_name":f"waring_img/warning_img/{file_str}.jpg",
                     "label_img_name":label_img_name,
                     "label_json_name":label_json_name,
-                    "bboxes":bboxes}
+                    "bboxes":bboxes,
+                    "mapping":mapping}
             print("alert接口返回的是",response)
             return response
         return {"alert":"无异常"}
