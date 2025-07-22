@@ -16,8 +16,9 @@ import httpx
 import os
 import datetime
 import asyncio
+import re
 
-from utility import video_chat_async,chat_request,insert_txt,video_chat_async_limit_frame
+from utility import video_chat_async,chat_request,insert_txt,video_chat_async_limit_frame,generate_qwen_vl_prompt_with_deepseek, draw_and_save_boxes, qwenvl_warning_img_detection, extract_entity_mapping
 from config import RAGConfig
 
 # 从配置文件加载提示词
@@ -122,25 +123,36 @@ class MultiModalAnalyzer:
         
         if "无异常" not in alert:
             current_time = timestamps[0]
+            import os
+            os.makedirs("video_warning/waring_img", exist_ok=True)
+            os.makedirs("video_warning/warning_video", exist_ok=True)
             file_str = f"waring_{current_time}"
-            new_file_name = f"video_warning/{file_str}.mp4"
-            # 重命名文件
+            new_file_name = f"video_warning/warning_video/{file_str}.mp4"
             os.rename("./video_warning/output.mp4", new_file_name)            
-            #with open("./video_warning/video_warning.txt", 'a', encoding='utf-8') as file:
-            #    file.write(new_file_name+" "+alert + '\n')    
-            
             frame = frames[0]
             if frame.dtype != np.uint8:
                 frame = frame.astype(np.uint8)
             if len(frame.shape) == 2:
-                # 如果帧是灰度的，转换为BGR
                 frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR) 
-            cv2.imwrite(f"video_warning/{file_str}.jpg", frame)
-            #print("历史记录:",Recursive_summary)
-            return {"alert":f"<span style=\"color:red;\">{alert}</span>",
+            img_path = f"video_warning/waring_img/{file_str}.jpg"
+            cv2.imwrite(img_path, frame)
+
+            # 1. 用deepseek生成千问VL目标检测prompt
+            prompt4detect = await generate_qwen_vl_prompt_with_deepseek(alert, description)
+
+            # 2. 用千问vl对异常截图做目标检测，保存标注图片和json
+            label_img_name, label_json_name, bboxes = await qwenvl_warning_img_detection(img_path, prompt4detect, current_time)
+            # 生成mapping字段
+            mapping = extract_entity_mapping(description, bboxes)
+            response = {"alert":f"<span style=\"color:red;\">{alert}</span>",
                     "description":f' 当前10秒监控消息描述：\n{description}\n\n 历史监控内容:\n{Recursive_summary}',
-                    "video_file_name":f"{file_str}.mp4",
-                    "picture_file_name":f"{file_str}.jpg"}
-            
+                    "video_file_name":f"warning_video/warning_video/{file_str}.mp4",
+                    "picture_file_name":f"waring_img/warning_img/{file_str}.jpg",
+                    "label_img_name":label_img_name,
+                    "label_json_name":label_json_name,
+                    "bboxes":bboxes,
+                    "mapping":mapping}
+            print("alert接口返回的是",response)
+            return response
         return {"alert":"无异常"}
         

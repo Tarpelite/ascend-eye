@@ -6,6 +6,31 @@ __pycache__/
 # C extensions
 *.so
 
+
+# 忽略视频警告文件
+compute_node/analyze_part/video_warning/**/*.mp4
+compute_node/analyze_part/video_warning/**/*.avi
+compute_node/analyze_part/video_warning/**/*.mov
+compute_node/analyze_part/video_warning/**/*.mkv
+compute_node/analyze_part/video_warning/**/*.flv
+compute_node/analyze_part/video_warning/**/*.webm
+compute_node/analyze_part/video_warning/**/*.wmv
+compute_node/analyze_part/video_warning/**/*.mpg
+compute_node/analyze_part/video_warning/**/*.mpeg
+compute_node/analyze_part/video_warning/**/*.ts
+compute_node/analyze_part/测试视频/*.mp4
+compute_node/analyze_part/测试视频/*.avi
+compute_node/analyze_part/测试视频/*.mov
+compute_node/analyze_part/测试视频/*.mkv
+compute_node/analyze_part/测试视频/*.flv
+compute_node/analyze_part/测试视频/*.webm
+compute_node/analyze_part/测试视频/*.wmv
+compute_node/analyze_part/测试视频/*.mpg
+compute_node/analyze_part/测试视频/*.mpeg
+compute_node/analyze_part/测试视频/*.ts
+compute_node/analyze_part/video_warning/**/*.jpg
+
+
 # Distribution / packaging
 .Python
 build/

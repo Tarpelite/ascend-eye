@@ -13,6 +13,7 @@ import json
 import httpx
 import logging
 from config import APIConfig, RAGConfig,VideoConfig
+from prompt import ENTITY_TO_QWEN_PROMPT_SYSTEM
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -134,7 +135,125 @@ async def video_chat_async_limit_frame(text, frames,timestamps,fps=20):
         logger.error(f"❌ 通义千问API未知错误: {e}")
         return "视频分析服务异常"
 
-
+async def qwenvl_warning_img_detection(img_path, prompt, current_time):
+    """
+    使用千问VL对异常截图做目标检测，保存标注图片和json
+    img_path: 图片路径
+    prompt: 检测提示词
+    current_time: 时间戳
+    返回: (标注图片路径, json文件路径, 检测框列表)
+    """
+    import base64
+    import cv2
+    from PIL import Image, ImageDraw, ImageFont
+    import ast
+    import os
+    # 1. 图片编码
+    def encode_image(image_path):
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode("utf-8")
+    # 目录准备
+    os.makedirs("video_warning/label_img", exist_ok=True)
+    os.makedirs("video_warning/label_json", exist_ok=True)
+    # 2. 调用千问VL API
+    base64_image = encode_image(img_path)
+    url = APIConfig.QWEN_API_URL + "/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {APIConfig.QWEN_API_KEY}"
+    }
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                },
+                {"type": "text", "text": prompt}
+            ]
+        }
+    ]
+    data = {
+        "model": APIConfig.QWEN_MODEL,
+        "messages": messages
+    }
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            response_data = response.json()
+            detect_result = response_data['choices'][0]['message']['content']
+    except Exception as e:
+        logger.error(f"千问VL检测失败: {e}")
+        return None, None, []
+    # 3. 解析检测结果
+    def parse_json(json_output):
+        lines = json_output.splitlines()
+        for i, line in enumerate(lines):
+            if line.strip() == "```json":
+                json_output = "\n".join(lines[i+1:])
+                json_output = json_output.split("```" )[0]
+                break
+        return json_output
+    bboxes = []
+    try:
+        parsed_result = parse_json(detect_result)
+        bboxes = json.loads(parsed_result)
+    except Exception as e:
+        # 尝试直接解析
+        try:
+            import re
+            json_str = re.search(r'\[.*\]', detect_result, re.DOTALL).group(0)
+            bboxes = json.loads(json_str)
+        except:
+            logger.error(f"解析检测结果失败: {e}")
+            bboxes = []
+    # 4. 绘制标注框并保存
+    def get_system_font(size=14):
+        font_candidates = ["msyh.ttc", "simhei.ttf", "arial.ttf", None]
+        for font_file in font_candidates:
+            try:
+                return ImageFont.truetype(font_file, size=size) if font_file else ImageFont.load_default()
+            except OSError:
+                continue
+        return ImageFont.load_default()
+    # 打开图片
+    img = Image.open(img_path)
+    draw = ImageDraw.Draw(img)
+    font = get_system_font(14)
+    colors = ['red', 'green', 'blue', 'yellow', 'orange', 'pink', 'purple', 'brown']
+    # 绘制每个检测框
+    for i, bbox_info in enumerate(bboxes):
+        try:
+            bbox = bbox_info.get('bbox', [])
+            cls = bbox_info.get('class', '目标')
+            if len(bbox) == 4:
+                x1, y1, x2, y2 = map(int, bbox)
+                color = colors[i % len(colors)]
+                # 绘制矩形框
+                draw.rectangle([(x1, y1), (x2, y2)], outline=color, width=3)
+                # 绘制标签
+                draw.text((x1 + 5, y1 - 20), cls, fill=color, font=font)
+        except Exception as e:
+            logger.warning(f"绘制第{i}个检测框失败: {e}")
+    # 5. 保存文件
+    label_img_name = f"video_warning/label_img/labeled_warning_{current_time}.jpg"
+    label_json_name = f"video_warning/label_json/warning_{current_time}.json"
+    # 保存标注图片
+    img.save(label_img_name)
+    # 保存JSON
+    json_data = {
+        "filename": f"warning_{current_time}.jpg",
+        "prompt": prompt,
+        "response": detect_result,
+        "bboxes": bboxes,
+        "timestamp": current_time
+    }
+    with open(label_json_name, 'w', encoding='utf-8') as f:
+        json.dump(json_data, f, ensure_ascii=False, indent=2)
+    logger.info(f"✅ 检测完成，保存到: {label_img_name}, {label_json_name}")
+    return label_img_name, label_json_name, bboxes
 
 async def video_chat_async(text, frames, timestamps, fps=20):
     video_base64 = frames_to_base64(frames, fps, timestamps)
@@ -214,6 +333,62 @@ async def chat_request(message,stream=False):
     except Exception as e:
         logger.error(f"❌ DeepSeek API未知错误: {e}")
         return "文本分析服务异常"
+
+async def generate_qwen_vl_prompt_with_deepseek(alert_text, description_text):
+    """
+    输入异常描述和视频内容描述，调用deepseek生成千问VL目标检测prompt
+    要求bboxes中的class名称与description_text中的实体词语严格一致。
+    """
+    system_prompt = ENTITY_TO_QWEN_PROMPT_SYSTEM + "\n请确保你输出的所有标注框class名称，必须与视频内容描述（description_text）中的实体词语严格一致，便于前端高亮和交互。不要使用泛化词或同义词，直接用描述中的原文。"
+    user_prompt = f"异常信息：{alert_text}\n视频内容描述：{description_text}"
+    message = f"<|system|>{system_prompt}\n<|user|>{user_prompt}"
+    prompt = await chat_request(message)
+    print("生成的qwen目标检测提示词是",prompt)
+    return prompt
+
+
+def extract_entity_mapping(description_text, bboxes):
+    """
+    根据description_text和bboxes，生成class与描述中句子的对应关系mapping。
+    返回格式: {class: [出现的句子或片段, ...]}
+    """
+    import re
+    mapping = {}
+    for obj in bboxes:
+        cls = obj.get('class', None)
+        if not cls:
+            continue
+        # 在description_text中查找所有包含class词语的句子
+        sentences = re.split(r'[。！？\n]', description_text)
+        related = [s for s in sentences if cls in s]
+        mapping[cls] = related if related else []
+    return mapping
+
+
+def draw_and_save_boxes(img_path, bboxes, label_img_path, label_json_path, entity=None):
+    """
+    在图片上绘制目标框并保存，保存json
+    img_path: 原图路径
+    bboxes: [{"class":..., "bbox": [x1, y1, x2, y2]}, ...]
+    label_img_path: 输出图片路径
+    label_json_path: 输出json路径
+    entity: 类别名（可选）
+    """
+    import cv2
+    import json
+    img = cv2.imread(img_path)
+    for obj in bboxes:
+        bbox = obj.get('bbox', [])
+        cls = obj.get('class', entity if entity else '目标')
+        if len(bbox) == 4:
+            x1, y1, x2, y2 = map(int, bbox)
+            color = (0, 0, 255)
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(img, cls, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+    cv2.imwrite(label_img_path, img)
+    with open(label_json_path, 'w', encoding='utf-8') as f:
+        json.dump(bboxes, f, ensure_ascii=False, indent=2)
+
 
 def insert_txt(docs,table_name):
     #插入文本，同时向量化
