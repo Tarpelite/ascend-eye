@@ -55,7 +55,7 @@ class MultiModalAnalyzer:
         self.message_queue = []
         print("历史队列已清空，监控重新开始")
     
-    async def analyze(self, frames,fps=20,timestamps=None):
+    async def analyze(self, frames, fps=20, timestamps=None, uav_id=None):
         start_time = time.time()
         
         # 构建历史信息用于总结
@@ -75,7 +75,7 @@ class MultiModalAnalyzer:
             print("首次监控，无历史记录")
         
         time_temp = time.time()
-        description = await video_chat_async_limit_frame(prompt_vieo,frames,timestamps,fps=fps)
+        description = await video_chat_async_limit_frame(prompt_vieo,frames,timestamps,fps=fps,uav_id=uav_id)
         description_time = time.time()-time_temp
         description_time = time.time()-time_temp
 
@@ -91,7 +91,10 @@ class MultiModalAnalyzer:
             # 本地文件保存
             with open(RAGConfig.HISTORY_FILE, 'a', encoding='utf-8') as file:
                 print("开始保存历史消息")
-                file.write(date_flag+description + '\n')          
+                if uav_id is not None:
+                    file.write(f"{uav_id}:{date_flag}{description}\n")
+                else:
+                    file.write(date_flag+description + '\n')          
                 
 
         
@@ -126,9 +129,27 @@ class MultiModalAnalyzer:
             import os
             os.makedirs("video_warning/waring_img", exist_ok=True)
             os.makedirs("video_warning/warning_video", exist_ok=True)
-            file_str = f"waring_{current_time}"
+            
+            # 文件名包含无人机编号
+            if uav_id is not None:
+                file_str = f"uav{uav_id}_waring_{current_time}"
+            else:
+                file_str = f"waring_{current_time}"
+                
             new_file_name = f"video_warning/warning_video/{file_str}.mp4"
-            os.rename("./video_warning/output.mp4", new_file_name)            
+            
+            # 根据uav_id选择对应的output文件
+            if uav_id is not None:
+                source_file = f"./video_warning/output_{uav_id}.mp4"
+            else:
+                source_file = "./video_warning/output.mp4"
+            
+            # 检查文件是否存在再移动
+            if os.path.exists(source_file):
+                os.rename(source_file, new_file_name)
+            else:
+                print(f"警告：源文件 {source_file} 不存在，无法移动到 {new_file_name}")
+                
             frame = frames[0]
             if frame.dtype != np.uint8:
                 frame = frame.astype(np.uint8)
@@ -141,10 +162,18 @@ class MultiModalAnalyzer:
             prompt4detect = await generate_qwen_vl_prompt_with_deepseek(alert, description)
 
             # 2. 用千问vl对异常截图做目标检测，保存标注图片和json
-            label_img_name, label_json_name, bboxes = await qwenvl_warning_img_detection(img_path, prompt4detect, current_time)
+            label_img_name, label_json_name, bboxes = await qwenvl_warning_img_detection(img_path, prompt4detect, current_time, uav_id)
             # 生成mapping字段
             mapping = extract_entity_mapping(description, bboxes)
-            response = {"alert":f"<span style=\"color:red;\">{alert}</span>",
+            # 将异常警告写入warning_history.txt
+            with open('warning_history.txt', 'a', encoding='utf-8') as f:
+                if uav_id is not None:
+                    f.write(f"{uav_id}:{current_time}:{alert}\n")
+                else:
+                    f.write(f"{current_time}:{alert}\n")
+            response = {
+                "uav_id":uav_id,
+                "alert":f"<span style=\"color:red;\">{alert}</span>",
                     "description":f' 当前10秒监控消息描述：\n{description}\n\n 历史监控内容:\n{Recursive_summary}',
                     "video_file_name":f"warning_video/warning_video/{file_str}.mp4",
                     "picture_file_name":f"waring_img/warning_img/{file_str}.jpg",
