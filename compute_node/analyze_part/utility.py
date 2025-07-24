@@ -19,7 +19,7 @@ from prompt import ENTITY_TO_QWEN_PROMPT_SYSTEM
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def frames_to_base64(frames,fps,timestamps):
+def frames_to_base64(frames,fps,timestamps,uav_id=None):
     print(len(frames))
     print(fps)
     width = frames[0].shape[1]
@@ -28,6 +28,12 @@ def frames_to_base64(frames,fps,timestamps):
     # 确保尺寸是偶数（H.264要求）
     width = width - (width % 2)
     height = height - (height % 2)
+    
+    # 根据uav_id生成独立的output文件名
+    if uav_id is not None:
+        output_file = f'./video_warning/output_{uav_id}.mp4'
+    else:
+        output_file = './video_warning/output.mp4'
     
     # 尝试多种编码器，优先使用Web兼容格式
     fourcc_options = [
@@ -40,7 +46,7 @@ def frames_to_base64(frames,fps,timestamps):
     video_writer = None
     for fourcc in fourcc_options:
         try:
-            video_writer = cv2.VideoWriter('./video_warning/output.mp4', fourcc, fps, (width, height))
+            video_writer = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
             if video_writer.isOpened():
                 logger.info(f"✅ 成功使用编码器: {fourcc}")
                 break
@@ -52,7 +58,7 @@ def frames_to_base64(frames,fps,timestamps):
     
     if video_writer is None or not video_writer.isOpened():
         logger.warning("❌ 所有视频编码器都失败，使用默认编码器")
-        video_writer = cv2.VideoWriter('./video_warning/output.mp4', -1, fps, (width, height))  
+        video_writer = cv2.VideoWriter(output_file, -1, fps, (width, height))
     # 遍历所有帧，并将其写入视频文件
     for frame in frames:
         # 确保帧是正确的数据类型和形状
@@ -67,16 +73,16 @@ def frames_to_base64(frames,fps,timestamps):
     video_writer.release()
 
     
-    with open('./video_warning/output.mp4', 'rb') as video_file:
+    with open(output_file, 'rb') as video_file:
         video_base64 = base64.b64encode(video_file.read()).decode('utf-8')
     
     return video_base64
 
 
 #强制抽取关键帧帧，每秒一帧率
-async def video_chat_async_limit_frame(text, frames,timestamps,fps=20):
+async def video_chat_async_limit_frame(text, frames,timestamps,fps=20,uav_id=None):
 
-    video_base64 = frames_to_base64(frames,fps,timestamps)
+    video_base64 = frames_to_base64(frames,fps,timestamps,uav_id)
 
 
     #url = "http://172.16.10.44:8085/v1/chat/completions"
@@ -135,12 +141,13 @@ async def video_chat_async_limit_frame(text, frames,timestamps,fps=20):
         logger.error(f"❌ 通义千问API未知错误: {e}")
         return "视频分析服务异常"
 
-async def qwenvl_warning_img_detection(img_path, prompt, current_time):
+async def qwenvl_warning_img_detection(img_path, prompt, current_time, uav_id=None):
     """
     使用千问VL对异常截图做目标检测，保存标注图片和json
     img_path: 图片路径
     prompt: 检测提示词
     current_time: 时间戳
+    uav_id: 无人机编号
     返回: (标注图片路径, json文件路径, 检测框列表)
     """
     import base64
@@ -237,13 +244,18 @@ async def qwenvl_warning_img_detection(img_path, prompt, current_time):
                 draw.text((x1 + 5, y1 - 20), cls, fill=color, font=font)
         except Exception as e:
             logger.warning(f"绘制第{i}个检测框失败: {e}")
-    # 5. 保存文件
-    label_img_name = f"video_warning/label_img/labeled_warning_{current_time}.jpg"
-    label_json_name = f"video_warning/label_json/warning_{current_time}.json"
+    # 5. 保存文件，文件名包含无人机编号
+    if uav_id is not None:
+        label_img_name = f"video_warning/label_img/uav{uav_id}_labeled_warning_{current_time}.jpg"
+        label_json_name = f"video_warning/label_json/uav{uav_id}_warning_{current_time}.json"
+    else:
+        label_img_name = f"video_warning/label_img/labeled_warning_{current_time}.jpg"
+        label_json_name = f"video_warning/label_json/warning_{current_time}.json"
     # 保存标注图片
     img.save(label_img_name)
     # 保存JSON
     json_data = {
+        "uav_id": uav_id,
         "filename": f"warning_{current_time}.jpg",
         "prompt": prompt,
         "response": detect_result,
@@ -255,8 +267,8 @@ async def qwenvl_warning_img_detection(img_path, prompt, current_time):
     logger.info(f"✅ 检测完成，保存到: {label_img_name}, {label_json_name}")
     return label_img_name, label_json_name, bboxes
 
-async def video_chat_async(text, frames, timestamps, fps=20):
-    video_base64 = frames_to_base64(frames, fps, timestamps)
+async def video_chat_async(text, frames, timestamps, fps=20, uav_id=None):
+    video_base64 = frames_to_base64(frames, fps, timestamps, uav_id)
 
     url = APIConfig.QWEN_API_URL + "/chat/completions"
     headers = {
