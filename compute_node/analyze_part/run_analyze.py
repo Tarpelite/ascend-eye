@@ -15,6 +15,8 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Path, Query
 from fastapi.responses import JSONResponse
 from fastapi.websockets import WebSocketState
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from collections import deque 
 from typing import Optional, Dict, Any 
 import numpy as np 
@@ -48,6 +50,7 @@ def parse_args():
     parser.add_argument('--port', type=int, help='服务器端口')
     parser.add_argument('--reload', type=bool, help='是否启用热重载')
     parser.add_argument('--workers', type=int, help='工作进程数')
+    parser.add_argument('--api_only', action='store_true', help='仅启用API后端，不进行视频分析')
     
     args = parser.parse_args()
     return {k: v for k, v in vars(args).items() if v is not None}
@@ -155,7 +158,8 @@ class VideoProcessor:
         count = 0
         start = time.time()
         async for frame in self.frame_generator(): 
-            asyncio.create_task(archiver.write_frame(frame))
+            if archiver is not None:
+                asyncio.create_task(archiver.write_frame(frame))
             count = count + 1
             
             # 定时触发分析 
@@ -246,9 +250,41 @@ class VideoArchiver:
         self.last_split = datetime.now() 
  
 # FastAPI应用配置 
-app = FastAPI(title="智能视频监控系统")
-# 启动多路分析
-processors = [VideoProcessor(src, uav_id) for src, uav_id in zip(video_sources, uav_ids)]
+app = FastAPI(title="Ascend-eye")
+
+# 添加CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 允许所有来源，生产环境应该指定具体域名
+    allow_credentials=True,
+    allow_methods=["*"],  # 允许所有HTTP方法
+    allow_headers=["*"],  # 允许所有请求头
+)
+
+# 挂载静态文件目录，让前端可以通过URL访问视频资源
+import os
+if os.path.exists("video_warning"):
+    app.mount("/video_warning", StaticFiles(directory="video_warning"), name="video_warning")
+    print("✅ 静态文件服务已启用: /video_warning")
+else:
+    print("⚠️ video_warning 目录不存在，静态文件服务未启用")
+    # 创建目录结构
+    os.makedirs("video_warning/warning_video", exist_ok=True)
+    os.makedirs("video_warning/waring_img", exist_ok=True)
+    os.makedirs("video_warning/label_img", exist_ok=True)
+    os.makedirs("video_warning/label_json", exist_ok=True)
+    app.mount("/video_warning", StaticFiles(directory="video_warning"), name="video_warning")
+    print("✅ 已创建 video_warning 目录并启用静态文件服务")
+
+# 根据命令行参数决定是否启动视频分析
+api_only_mode = args.get('api_only', False)
+if api_only_mode:
+    print("🔧 API模式启动：仅提供后端接口服务，不进行视频分析")
+    processors = []
+else:
+    print("🎥 完整模式启动：包含视频分析和后端接口服务")
+    # 启动多路分析
+    processors = [VideoProcessor(src, uav_id) for src, uav_id in zip(video_sources, uav_ids)]
 
 # VideoArchiver类需要接收width/height/fps
 class VideoArchiver:
@@ -283,15 +319,24 @@ class VideoArchiver:
         )
         self.last_split = datetime.now() 
 
-# 初始化archiver时传入第一个视频流的参数
-archiver = VideoArchiver(processors[0].width, processors[0].height, processors[0].fps)
+# 初始化archiver时传入第一个视频流的参数（仅在非API模式下）
+if processors:
+    archiver = VideoArchiver(processors[0].width, processors[0].height, processors[0].fps)
+else:
+    archiver = None
 
 async def start_all_processors():
-    await asyncio.gather(*(p.start_processing() for p in processors))
-
+    if processors:
+        await asyncio.gather(*(p.start_processing() for p in processors))
+    else:
+        print("📡 API模式：无视频处理器需要启动")
+ 
 @app.on_event("startup") 
 async def startup():
-    asyncio.create_task(start_all_processors()) 
+    if processors:
+        asyncio.create_task(start_all_processors())
+    else:
+        print("🚀 后端API服务已启动，等待前端连接...") 
  
 @app.websocket("/alerts") 
 async def alert_websocket(websocket: WebSocket):
@@ -306,6 +351,13 @@ async def alert_websocket(websocket: WebSocket):
 async def video_feed(websocket: WebSocket, uav_id: int = Query(1, description="无人机编号")):
     try:
         await websocket.accept()
+        
+        # 检查是否在API模式下
+        if api_only_mode:
+            await websocket.send_text("⚠️ 当前为API模式，视频流功能不可用。请使用完整模式启动服务。")
+            await websocket.close()
+            return
+            
         # 查找对应uav_id的processor
         processor = None
         for p in processors:
@@ -343,22 +395,73 @@ def parse_history_file(filename, uav_id):
             line = line.strip()
             if not line:
                 continue
-            parts = line.split(":", 2)
-            if len(parts) >= 3 and parts[0] == str(uav_id):
-                history.append({"uav_id": parts[0], "time": parts[1], "info": parts[2]})
+            try:
+                # 尝试解析JSON格式
+                record = json.loads(line)
+                if record.get("uav_id") == str(uav_id):
+                    history.append(record)
+            except json.JSONDecodeError:
+                # 如果不是JSON格式，尝试解析旧格式（兼容性）
+                parts = line.split(":", 2)
+                if len(parts) >= 3 and parts[0] == str(uav_id):
+                    history.append({"uav_id": parts[0], "time": parts[1], "info": parts[2]})
         return history
+    except Exception as e:
+        return []
+
+# 解析warning_history文件（包含完整JSON数据）
+def parse_warning_history_file(filename, uav_id):
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        warning_history = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                # 尝试解析JSON格式
+                record = json.loads(line)
+                if record.get("uav_id") == str(uav_id):
+                    warning_history.append(record)
+            except json.JSONDecodeError:
+                # 如果不是JSON格式，尝试解析旧格式（兼容性）
+                parts = line.split(":", 2)
+                if len(parts) >= 3 and parts[0] == str(uav_id):
+                    try:
+                        # 尝试解析JSON数据
+                        response_data = json.loads(parts[2])
+                        response_data["time"] = parts[1]  # 添加时间字段
+                        warning_history.append({"uav_id": parts[0], "time": parts[1], "info": response_data})
+                    except json.JSONDecodeError:
+                        # 如果不是JSON格式，保持原有格式
+                        warning_history.append({"uav_id": parts[0], "time": parts[1], "info": parts[2]})
+        return warning_history
     except Exception as e:
         return []
 
 @app.get("/history/{uav_id}")
 def get_history_by_uav(uav_id: int = Path(..., description="无人机编号")):
-    history = parse_history_file("video_histroy_info.txt", uav_id)
+    history = parse_history_file("video_histroy_info.json", uav_id)
     return {"history": history}
 
 @app.get("/warning_history/{uav_id}")
 def get_warning_history_by_uav(uav_id: int = Path(..., description="无人机编号")):
-    history = parse_history_file("warning_history.txt", uav_id)
-    return {"warning_history": history}
+    warning_history = parse_warning_history_file("warning_history.json", uav_id)
+    return {"warning_history": warning_history}
+
+@app.get("/status")
+def get_system_status():
+    """获取系统运行状态"""
+    return {
+        "mode": "API模式" if api_only_mode else "完整模式",
+        "api_only": api_only_mode,
+        "video_analysis_enabled": not api_only_mode,
+        "active_processors": len(processors),
+        "uav_ids": [p.uav_id for p in processors] if processors else [],
+        "archiver_enabled": archiver is not None,
+        "timestamp": datetime.now().isoformat()
+    }
 
 
 if __name__ == "__main__":

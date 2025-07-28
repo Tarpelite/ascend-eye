@@ -88,14 +88,19 @@ class MultiModalAnalyzer:
             insert_txt([date_flag+description],'table_test_table')
         else:
             print("RAG未开启,准备保存到本地")
-            # 本地文件保存
+            # 本地文件保存，使用JSON格式
             with open(RAGConfig.HISTORY_FILE, 'a', encoding='utf-8') as file:
                 print("开始保存历史消息")
-                if uav_id is not None:
-                    file.write(f"{uav_id}:{date_flag}{description}\n")
-                else:
-                    file.write(date_flag+description + '\n')          
-                
+                # 将description中的换行符清理，避免JSON解析问题
+                clean_description = description.replace('\n', '').replace('\r', '')
+                # 构建JSON格式的记录
+                history_record = {
+                    "uav_id": str(uav_id) if uav_id is not None else "1",
+                    "time": timestamps[0],
+                    "info": f"{date_flag}{clean_description}"
+                }
+                # 写入JSON格式的记录
+                file.write(json.dumps(history_record, ensure_ascii=False) + '\n')
 
         
         text = prompt_detect.format(Recursive_summary=Recursive_summary,current_time=timestamps[0]+"  - " + timestamps[-1],latest_description=description)
@@ -127,14 +132,14 @@ class MultiModalAnalyzer:
         if "无异常" not in alert:
             current_time = timestamps[0]
             import os
-            os.makedirs("video_warning/waring_img", exist_ok=True)
+            os.makedirs("video_warning/warning_img", exist_ok=True)
             os.makedirs("video_warning/warning_video", exist_ok=True)
             
             # 文件名包含无人机编号
             if uav_id is not None:
-                file_str = f"uav{uav_id}_waring_{current_time}"
+                file_str = f"uav{uav_id}_warning_{current_time}"
             else:
-                file_str = f"waring_{current_time}"
+                file_str = f"warning_{current_time}"
                 
             new_file_name = f"video_warning/warning_video/{file_str}.mp4"
             
@@ -155,7 +160,7 @@ class MultiModalAnalyzer:
                 frame = frame.astype(np.uint8)
             if len(frame.shape) == 2:
                 frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR) 
-            img_path = f"video_warning/waring_img/{file_str}.jpg"
+            img_path = f"video_warning/warning_img/{file_str}.jpg"
             cv2.imwrite(img_path, frame)
 
             # 1. 用deepseek生成千问VL目标检测prompt
@@ -165,22 +170,29 @@ class MultiModalAnalyzer:
             label_img_name, label_json_name, bboxes = await qwenvl_warning_img_detection(img_path, prompt4detect, current_time, uav_id)
             # 生成mapping字段
             mapping = extract_entity_mapping(description, bboxes)
-            # 将异常警告写入warning_history.txt
-            with open('warning_history.txt', 'a', encoding='utf-8') as f:
-                if uav_id is not None:
-                    f.write(f"{uav_id}:{current_time}:{alert}\n")
-                else:
-                    f.write(f"{current_time}:{alert}\n")
+            # 将异常警告和完整response写入warning_history.txt
             response = {
                 "uav_id":uav_id,
-                "alert":f"<span style=\"color:red;\">{alert}</span>",
-                    "description":f' 当前10秒监控消息描述：\n{description}\n\n 历史监控内容:\n{Recursive_summary}',
-                    "video_file_name":f"warning_video/warning_video/{file_str}.mp4",
-                    "picture_file_name":f"waring_img/warning_img/{file_str}.jpg",
-                    "label_img_name":label_img_name,
-                    "label_json_name":label_json_name,
-                    "bboxes":bboxes,
-                    "mapping":mapping}
+                "alert":f"{alert}",
+                "description":f' 当前10秒监控消息描述：\n{description}\n\n 历史监控内容:\n{Recursive_summary}',
+                "video_file_name":f"video_warning/warning_video/{file_str}.mp4",
+                "picture_file_name":f"video_warning/warning_img/{file_str}.jpg",
+                "label_img_name":label_img_name,
+                "label_json_name":label_json_name,
+                "bboxes":bboxes,
+                "mapping":mapping
+            }
+            
+            with open('warning_history.json', 'a', encoding='utf-8') as f:
+                # 构建统一的JSON格式记录
+                warning_record = {
+                    "uav_id": str(uav_id) if uav_id is not None else "1",
+                    "time": current_time,
+                    "info": response  # 这里直接存储完整的response数据
+                }
+                # 写入JSON格式的记录
+                f.write(json.dumps(warning_record, ensure_ascii=False) + '\n')
+            # response已在上面构建并写入文件，这里直接返回
             print("alert接口返回的是",response)
             return response
         return {"alert":"无异常"}

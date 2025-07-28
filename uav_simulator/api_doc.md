@@ -57,13 +57,30 @@
 
 ### 3. GET /warning_history/{uav_id}
 - **URL**：`http://localhost:8000/warning_history/{uav_id}`
-- **功能**：获取指定无人机的历史异常信息（仅有异常的分析结果）。
+- **功能**：获取指定无人机的历史异常信息（包含完整的异常分析结果和所有字段）。
 - **参数**：`uav_id`（路径参数，无人机编号，int）
 - **返回示例**：
 ```json
 {
   "warning_history": [
-    {"uav_id": "2", "time": "2024-06-01-12-34-56", "info": "<span style=\"color:red;\">请注意，出现了人员聚集的情况，需要即时处理或知晓。</span>"}
+    {
+      "time": "2024-06-01-12-34-56",
+      "uav_id": 2,
+      "alert": "<span style=\"color:red;\">请注意，出现了人员聚集的情况，需要即时处理或知晓。</span>",
+      "description": " 当前10秒监控消息描述：\n画面中有三名工人正在同一处区域聚集，旁边有一辆黄色工程车停靠。\n\n 历史监控内容:\n上一个时段无异常。",
+      "video_file_name": "warning_video/warning_video/uav2_waring_2024-06-01-12-34-56.mp4",
+      "picture_file_name": "waring_img/warning_img/uav2_waring_2024-06-01-12-34-56.jpg",
+      "label_img_name": "video_warning/label_img/labeled_warning_2024-06-01-12-34-56.jpg",
+      "label_json_name": "video_warning/label_json/warning_2024-06-01-12-34-56.json",
+      "bboxes": [
+        {"class": "工人", "bbox": [120, 200, 180, 320]},
+        {"class": "工程车", "bbox": [400, 250, 520, 380]}
+      ],
+      "mapping": {
+        "工人": ["画面中有三名工人正在同一处区域聚集，旁边有一辆黄色工程车停靠"],
+        "工程车": ["画面中有三名工人正在同一处区域聚集，旁边有一辆黄色工程车停靠"]
+      }
+    }
   ]
 }
 ```

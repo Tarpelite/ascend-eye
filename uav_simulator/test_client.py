@@ -273,7 +273,7 @@ class HTTPTestClient:
 
 def main():
     parser = argparse.ArgumentParser(description='HTTP视频流测试客户端')
-    parser.add_argument('--url', default='http://localhost:5000/video_feed',
+    parser.add_argument('--url', default='http://localhost:5001/video_feed',
                        help='HTTP流地址')
     parser.add_argument('--ai', action='store_true',
                        help='启用AI检测模拟')
