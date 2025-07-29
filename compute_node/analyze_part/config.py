@@ -11,8 +11,8 @@ VIDEO_SOURCE = r'测试视频/捕鱼0.mp4'
 # 视频处理配置
 class VideoConfig:
     VIDEO_INTERVAL = 1800  # 视频分段时长(秒)
-    ANALYSIS_INTERVAL = 3  # 分析间隔(秒)
-    BUFFER_DURATION = 3  # 滑窗分析时长（实际模型分析视频时长）#强制抽帧，每秒一帧率
+    ANALYSIS_INTERVAL = 10  # 分析间隔(秒)
+    BUFFER_DURATION = 10  # 滑窗分析时长（实际模型分析视频时长）#强制抽帧，每秒一帧率
     WS_RETRY_INTERVAL = 3  # WebSocket重连间隔(秒)
     MAX_WS_QUEUE = 100  # 消息队列最大容量
     JPEG_QUALITY = 70  # JPEG压缩质量
@@ -45,7 +45,7 @@ class RAGConfig:
     # 知识库配置
     ENABLE_RAG = False
     VECTOR_API_URL = "http://172.16.10.44:8085/add_text/" # 启用RAG需要自行搭建rag服务，并构造相应api接口
-    HISTORY_FILE = "video_histroy_info.txt"  # 如果不启用RAG，历史记录将保存在该文件中
+    HISTORY_FILE = "video_histroy_info.json"  # 如果不启用RAG，历史记录将保存在该文件中
 
 # 存档配置
 ARCHIVE_DIR = "archive"

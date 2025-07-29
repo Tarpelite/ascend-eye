@@ -10,45 +10,60 @@ import threading
 import argparse
 import os
 from flask import Flask, Response, render_template_string
+from flask_cors import CORS
 import sys
 from typing import List
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
-import uvicorn
+# FastAPI 相关导入已移除，统一使用 Flask
 import json
+from datetime import datetime
+
+def clean_markdown_json(data_string):
+    """
+    清理包含 markdown 标记的 JSON 字符串
+    与测试脚本中的逻辑完全一致
+    """
+    if not isinstance(data_string, str):
+        return data_string
+    
+    # 移除 markdown 代码块标记
+    clean_data = data_string.strip()
+    
+    # 移除开头的 ```json 或 ```
+    if clean_data.startswith('```json'):
+        clean_data = clean_data[7:]
+    elif clean_data.startswith('```'):
+        clean_data = clean_data[3:]
+    
+    # 移除结尾的 ```
+    if clean_data.endswith('```'):
+        clean_data = clean_data[:-3]
+    
+    # 清理首尾空白
+    clean_data = clean_data.strip()
+    
+    return clean_data
 
 app = Flask(__name__)
 video_source = None
 
-# 加载本地仿真数据
-uav_sim_data = {}
-try:
-    with open("uav_simulator/DroneData/flight_data_all.json", "r", encoding="utf-8") as f:
-        uav_sim_data = json.load(f)
-except Exception as e:
-    print(f"[WARN] 无法加载本地仿真数据: {e}")
-
-fastapi_app = FastAPI()
-
-@fastapi_app.get("/uav_data")
-def get_uav_data(port: int = Query(..., description="HTTP端口号")):
-    """
-    获取指定端口的无人机仿真数据
-    返回格式：
-    {
-        "port": 5000,
-        "data": [ {...}, {...}, ... ]  # 严格的JSON数组，每项为一帧仿真数据
-    }
-    """
-    data = uav_sim_data.get(port)
-    if data is None:
-        return JSONResponse(status_code=404, content={"error": f"No UAV data for port {port}"})
-    # 若data为字符串，转为json
+def load_uav_sim_data():
+    """动态加载最新的仿真数据"""
     try:
-        data_json = json.loads(data)
-    except Exception:
-        data_json = data
-    return {"port": port, "data": data_json}
+        with open("uav_simulator/DroneData/flight_data_all.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[DEBUG] 主路径加载失败: {e}")
+        # 如果文件不存在，尝试相对路径
+        try:
+            with open("DroneData/flight_data_all.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                print("[DEBUG] 使用相对路径加载仿真数据成功")
+                return data
+        except Exception as e2:
+            print(f"[ERROR] 两种路径都无法加载数据: {e2}")
+            return {}
+
+# 移除全局数据加载，改为动态加载
 
 class HTTPVideoSimulator:
     def __init__(self, video_path, port=5000):
@@ -129,6 +144,16 @@ class HTTPVideoSimulator:
 
 def create_app(video_path, port):
     app = Flask(__name__)
+    
+    # 添加CORS支持
+    CORS(app, resources={
+        r"/*": {
+            "origins": "*",  # 允许所有来源，生产环境应该指定具体域名
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
+    
     video_source = HTTPVideoSimulator(video_path, port)
 
     if not video_source.validate_video():
@@ -166,6 +191,41 @@ def create_app(video_path, port):
     def video_feed():
         return Response(video_source.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+    @app.route('/uav_data')
+    def uav_data():
+        """
+        获取无人机仿真数据
+        默认返回当前端口的数据，也可通过 ?port=xxxx 查询其他端口
+        """
+        current_port = port
+        print(f"[DEBUG] Flask /uav_data 默认端口: {current_port}")
+        # 动态加载最新数据
+        uav_sim_data = load_uav_sim_data()
+        print(f"[DEBUG] 可用数据端口: {list(uav_sim_data.keys())}")
+        
+        # 数据文件中的键是字符串类型，需要转换
+        data = uav_sim_data.get(str(current_port))
+        if data is None:
+            print(f"[ERROR] 端口 {current_port} 没有找到数据")
+            return {"error": f"No UAV data for port {current_port}"}, 404
+        
+        # 处理包含markdown标记的JSON字符串
+        try:
+            # 使用统一的清理函数
+            if isinstance(data, str):
+                clean_data = clean_markdown_json(data)
+                data_json = json.loads(clean_data)
+            else:
+                data_json = data
+        except Exception as e:
+            print(f"[ERROR] 解析端口 {current_port} 数据失败: {e}")
+            print(f"[DEBUG] 原始数据: {data[:200] if isinstance(data, str) else str(data)[:200]}...")
+            return {"error": f"Failed to parse data for port {current_port}: {str(e)}"}, 500
+        
+        return {
+            "port": current_port,
+            "data": data_json
+        }
     return app
 
 
@@ -178,6 +238,9 @@ def run_multi_simulators(video_paths: List[str], ports: List[int]):
             print(f"[INFO] 视频源: {video_path}")
             print(f"[INFO] 服务器地址: http://localhost:{port}")
             print(f"[INFO] 视频流地址: http://localhost:{port}/video_feed")
+            print(f"[INFO] 无人机数据: http://localhost:{port}/uav_data")
+            print(f"[INFO] 端口列表: http://localhost:{port}/uav_ports")
+            print(f"[INFO] 刷新数据: http://localhost:{port}/refresh_data")
             print(f"[INFO] 在浏览器中打开 http://localhost:{port} 查看视频流")
             print("[INFO] 按 Ctrl+C 停止服务器\n")
             app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
@@ -198,16 +261,11 @@ def main():
     parser.add_argument('--ports', nargs='+', type=int, help='HTTP端口列表')
     parser.add_argument('video', nargs='?', default='test_videos/test.mp4', help='单路视频文件路径（兼容旧用法）')
     parser.add_argument('--port', type=int, default=5000, help='单路HTTP端口（兼容旧用法）')
-    parser.add_argument('--api', action='store_true', help='是否启动FastAPI接口')
+# --api 参数已移除，FastAPI接口已废弃
     args = parser.parse_args()
 
-    # 启动FastAPI接口（默认5005端口）
-    if args.api:
-        def run_fastapi():
-            uvicorn.run(fastapi_app, host="0.0.0.0", port=5005, log_level="info")
-        t = threading.Thread(target=run_fastapi, daemon=True)
-        t.start()
-        print("[INFO] FastAPI接口已启动: http://localhost:5005/uav_data?port=5000")
+    # FastAPI接口已移除，统一使用Flask接口
+    # 每个视频流端口都有独立的 /uav_data 接口
 
     # 优先命令行参数
     if args.videos and args.ports:
@@ -227,6 +285,9 @@ def main():
         print(f"[INFO] 视频源: {args.video}")
         print(f"[INFO] 服务器地址: http://localhost:{args.port}")
         print(f"[INFO] 视频流地址: http://localhost:{args.port}/video_feed")
+        print(f"[INFO] 无人机数据: http://localhost:{args.port}/uav_data")
+        print(f"[INFO] 端口列表: http://localhost:{args.port}/uav_ports")
+        print(f"[INFO] 刷新数据: http://localhost:{args.port}/refresh_data")
         print(f"[INFO] 在浏览器中打开 http://localhost:{args.port} 查看视频流")
         print("[INFO] 按 Ctrl+C 停止服务器\n")
         try:

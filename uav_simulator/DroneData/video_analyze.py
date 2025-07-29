@@ -50,7 +50,7 @@ async def deepseek_generate_flight_data(qwen_vl_result):
             {"role": "user", "content": prompt}
         ]
     }
-    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(999999.0)) as client:
         response = await client.post(url, headers=headers, json=data)
         response.raise_for_status()
         response_data = response.json()
@@ -59,12 +59,13 @@ async def deepseek_generate_flight_data(qwen_vl_result):
 if __name__ == "__main__":
     # 4个不同视频路径
     video_paths = [
-        "uav_simulator/DroneData/测试视频/车祸.mp4",
-        "uav_simulator/DroneData/测试视频/车祸.mp4",
-        "uav_simulator/DroneData/测试视频/车祸.mp4",
-        "uav_simulator/DroneData/测试视频/车祸.mp4"
+        "DroneData/测试视频/test.mp4",
+        "DroneData/测试视频/边防.mp4"
+        # "uav_simulator/DroneData/测试视频/摔倒.mp4",
+        # "uav_simulator/DroneData/测试视频/车祸.mp4",
+        # "uav_simulator/DroneData/测试视频/长视频.mp4"
     ]
-    flight_data_json_list = {}
+    
     for idx, video_path in enumerate(video_paths):
         print(f"\n==== 分析视频 {video_path} ====")
         qwen_vl_result = qwen_vl_analyze(video_path, fps=2)
@@ -72,9 +73,25 @@ if __name__ == "__main__":
         print("\n==== 生成仿真飞行数据 ====")
         flight_data_json = asyncio.run(deepseek_generate_flight_data(qwen_vl_result))
         print("仿真飞行数据(JSON)：\n", flight_data_json)
-        # 以端口号为key保存
+        
+        # 以端口号为key保存，每次处理完一个就写入文件
         port = 5000 + idx
-        flight_data_json_list[port] = flight_data_json
-    # 可选：保存到文件或供run_simulator.py导入
-    with open("uav_simulator/DroneData/flight_data_all.json", "w", encoding="utf-8") as f:
-        json.dump(flight_data_json_list, f, ensure_ascii=False, indent=2)
+        
+        # 读取现有文件内容（如果存在）
+        file_path = "DroneData/flight_data_all.json"
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                flight_data_json_list = json.load(f)
+        except FileNotFoundError:
+            flight_data_json_list = {}
+        
+        # 添加当前端口的数据
+        flight_data_json_list[str(port)] = flight_data_json
+        
+        # 立即写入文件
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(flight_data_json_list, f, ensure_ascii=False, indent=2)
+        
+        print(f"✅ 端口 {port} 数据已保存到文件")
+    
+    print("\n🎉 所有数据处理完成！")

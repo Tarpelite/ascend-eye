@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>多路无人机视频监控</title>
+    <style>
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            padding: 20px;
+        }
+        .video-panel {
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        .video-stream {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 5px;
+        }
+        .uav-info {
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">无人机视频监控系统</h1>
+    
+    <div class="dashboard">
+        <div class="video-panel">
+            <div class="uav-info">UAV-001 (端口: 5000)</div>
+            <img src="http://localhost:5000/video_feed" 
+                 class="video-stream" 
+                 alt="UAV-001 视频流">
+        </div>
+        
+        <div class="video-panel">
+            <div class="uav-info">UAV-002 (端口: 5001)</div>
+            <img src="http://localhost:5001/video_feed" 
+                 class="video-stream" 
+                 alt="UAV-002 视频流">
+        </div>
+        
+        <div class="video-panel">
+            <div class="uav-info">UAV-003 (端口: 5002)</div>
+            <img src="http://localhost:5002/video_feed" 
+                 class="video-stream" 
+                 alt="UAV-003 视频流">
+        </div>
+        
+        <div class="video-panel">
+            <div class="uav-info">UAV-004 (端口: 5003)</div>
+            <img src="http://localhost:5003/video_feed" 
+                 class="video-stream" 
+                 alt="UAV-004 视频流">
+        </div>
+    </div>
+</body>
+</html>
