@@ -28,6 +28,9 @@ compute_node/analyze_part/测试视频/*.wmv
 compute_node/analyze_part/测试视频/*.mpg
 compute_node/analyze_part/测试视频/*.mpeg
 compute_node/analyze_part/测试视频/*.ts
+uav_simulator/DroneData/测试视频/*.mp4
+uav_simulator/test_videos/*.mp4
+uav_simulator/test_videos/scene_videos_mp4/*.mp4
 compute_node/analyze_part/video_warning/**/*.jpg
 
 
