@@ -1,157 +1,153 @@
 <template>
-  <div class="dashboard-container">
-    <!-- 左上角标题 -->
-    <div class="header">
-      <h1><span @click="$router.push('/main')">无人机载荷图像实时智能感知与推理系统</span>-机群控制模式</h1>
-    </div>
-    
-    <!-- 主要内容区域 -->
-    <div class="main-content">
-      <!-- 左侧无人机选择面板 -->
-      <div class="drone-selector">
-        <el-card class="selector-card">
-          <div class="selector-header">
-            <el-icon :size="28"><Position /></el-icon>
-            <span>无人机选择</span>
-          </div>
-          
-          <div 
-            v-for="(drone, index) in drones" 
-            :key="index"
-            class="drone-item"
-            :class="{ 'active': selectedDrone.id === drone.id }"
-            @click="selectDrone(drone)"
-          >
-            <div class="drone-icon">
-              <el-icon :size="32"><Connection /></el-icon>
+  <div>
+    <div class="dashboard-container">
+      <!-- 左上角标题 -->
+      <div class="header">
+        <h1><span @click="$router.push('/main')">无人机载荷图像实时智能感知与推理系统</span>-机群控制模式</h1>
+      </div>
+      
+      <!-- 主要内容区域 -->
+      <div class="main-content">
+        <!-- 左侧无人机选择面板 -->
+        <div class="drone-selector">
+          <el-card class="selector-card">
+            <div class="selector-header">
+              <el-icon :size="28"><Position /></el-icon>
+              <span>无人机选择</span>
             </div>
-            <div class="drone-info">
-              <div class="drone-name">{{ drone.name }}</div>
-              <div>
-                <span class="drone-status" :class="drone.inonline">
-                  {{ drone.inonline === 'normal' ? '在线' : '不在线' }}
-                </span>
-                <span class="drone-status" :class="drone.status">
-                  {{ drone.status === 'normal' ? '正常' : '异常' }}
-                </span>
-              </div>
-              
-            </div>
-            <!-- 跳转按钮，放在右侧 -->
-            <el-button
-              type="primary"
-              plain
-              size="medium"
-              class="drone-jump-btn"
-              @click="handleJump(index)"
+            
+            <div 
+              v-for="(drone, index) in drones" 
+              :key="index"
+              class="drone-item"
+              :class="{ 'active': selectedDrone.id === drone.id }"
+              @click="selectDrone(drone)"
             >
-            <el-icon><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </el-card>
-        
-        <!-- 无人机状态摘要 -->
-        <el-card class="status-summary">
-          <div class="summary-item">
-            <span>总无人机数</span>
-            <span class="value">{{ drones.length }}</span>
-          </div>
-          <div class="summary-item">
-            <span>在线无人机</span>
-            <span class="value">{{ onlineDrones }}</span>
-          </div>
-          <div class="summary-item">
-            <span>异常无人机</span>
-            <span class="value error">{{ abnormalDrones }}</span>
-          </div>
-        </el-card>
-      </div>
-      
-      <!-- 中间视频流区域 -->
-      <div class="video-container">
-        <div class="video-header">
-          <div class="video-title">
-            <el-icon><VideoCamera /></el-icon>
-            <span>{{ selectedDrone.name }} - 实时视频流</span>
-          </div>
-        </div>
-        
-        <!-- 视频流显示 -->
-        <div class="video-display">
-          <img 
-            :src="videoUrl" 
-            alt="无人机实时视频流"
-            class="video-stream"
-          />
-          
-          <!-- 视频信息叠加层 -->
-          <div class="video-osd">
-            <div class="osd-item">
-              <el-icon><Location /></el-icon>
-              <span>经度:{{ currentDroneFrame.longitude }} 纬度:{{ currentDroneFrame.latitude }}</span>
-            </div>
-            <div class="osd-item">
-              <el-icon><Aim /></el-icon>
-              <span>海拔: {{ currentDroneFrame.altitude }}米</span>
-            </div>
-            <div class="osd-item">
-              <el-icon><DataLine /></el-icon>
-              <span>Vx:{{ currentDroneFrame.vx }}km/h</span>
-            </div>
-            <div class="osd-item">
-              <el-icon><DataLine /></el-icon>
-              <span>Vy:{{ currentDroneFrame.vy }}km/h</span>
-            </div>
-            <div class="osd-item">
-              <el-icon><DataLine /></el-icon>
-              <span>Vz:{{ currentDroneFrame.vz }}km/h</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 右侧异常信息面板 -->
-      <div class="alert-panel">
-        <el-card class="alert-card">
-          <div class="alert-header">
-            <el-icon :size="28"><Warning /></el-icon>
-            <span>实时异常信息</span>
-            <el-button type="info" class="alert-count" @click="historyDialogVisible=true" plain>历史信息</el-button>
-          </div>
-          
-          <div class="alert-list-container">
-            <div class="alert-list">
-              <div
-                v-for="(alert, idx) in alerts"
-                :key="idx"
-                class="alert-item"
-                @click="showAlertDialog(alert)"
+              <div class="drone-icon">
+                <el-icon :size="32"><Connection /></el-icon>
+              </div>
+              <div class="drone-info">
+                <div class="drone-name">{{ drone.name }}</div>
+                <div>
+                  <span class="drone-status" :class="drone.inonline">
+                    {{ drone.inonline === 'normal' ? '在线' : '离线' }}
+                  </span>
+                  <span class="drone-status" :class="drone.status">
+                    {{ drone.status === 'normal' ? '正常' : '发现异常' }}
+                  </span>
+                </div>
+                
+              </div>
+              <!-- 跳转按钮，放在右侧 -->
+              <el-button
+                type="primary"
+                plain
+                size="medium"
+                class="drone-jump-btn"
+                @click="handleJump(index)"
               >
-                <div>
-                  <strong>无人机：</strong>{{ alert.uav_id }}
-                  <strong>时间：</strong>{{ alert.time }}
-                </div>
-                <div>
-                  <strong>警告：</strong>{{ alert.alert }}
-                </div>
-                <div>
-                  <a
-                    :href="`http://localhost:16532/${alert.video_file_name}`"
-                    target="_blank"
-                    rel="noopener"
-                  >查看视频</a>
+              <el-icon><ArrowRight /></el-icon>
+              </el-button>
+            </div>
+          </el-card>
+          
+          <!-- 无人机状态摘要 -->
+          <el-card class="status-summary">
+            <div class="summary-item">
+              <span>总无人机数</span>
+              <span class="value">{{ drones.length }}</span>
+            </div>
+            <div class="summary-item">
+              <span>在线无人机</span>
+              <span class="value">{{ onlineDrones }}</span>
+            </div>
+            <div class="summary-item">
+              <span>异常无人机</span>
+              <span class="value error">{{ abnormalDrones }}</span>
+            </div>
+          </el-card>
+        </div>
+        
+        <!-- 中间视频流区域 -->
+        <div class="video-container">
+          <!-- <div class="video-header">
+            <div class="video-title">
+              <el-icon><VideoCamera /></el-icon>
+              <span>{{ selectedDrone.name }} - 实时视频流</span>
+            </div>
+          </div> -->
+          
+          <!-- 视频流显示 -->
+          <div class="video-display">
+            <div class="video-grid-container">
+              <div class="video-grid">
+                <div
+                  v-for="drone in drones"
+                  :key="drone.id"
+                  class="video-grid-item"
+                >
+                  <div class="video-title">
+                    <el-icon><VideoCamera /></el-icon>
+                    <span>{{ drone.name }} - 实时视频流</span>
+                  </div>
+                  <img
+                    v-if = 'drone.inonline === "normal"'
+                    :src="drone.videoUrl"
+                    alt="无人机实时视频流"
+                    class="video-grid-stream"
+                  />
+                  <div v-else>
+                    <el-icon style="font-size:48px;color:#ff6b6b;"><Warning /></el-icon>
+                    <div style="color:#ff6b6b;margin-top:8px;">无人机未连接</div>
+                  </div>
                 </div>
               </div>
             </div>
+            
+            
           </div>
-        </el-card>
+        </div>
+        
+        <!-- 右侧异常信息面板 -->
+        <div class="alert-panel">
+          <el-card class="alert-card">
+            <div class="alert-header">
+              <el-icon :size="28"><Warning /></el-icon>
+              <span>实时异常信息</span>
+              <el-button type="info" class="alert-count" @click="historyDialogVisible=true" plain>历史信息</el-button>
+            </div>
+            
+            <div class="alert-list-container">
+              <div class="alert-list">
+                <div
+                  v-for="(alert, idx) in alerts"
+                  :key="idx"
+                  class="alert-item"
+                  @click="showAlertDialog(alert)"
+                >
+                  <div>
+                    <strong>无人机：</strong>{{ alert.uav_id }}
+                    <strong>时间：</strong>{{ alert.time }}
+                  </div>
+                  <div>
+                    <strong>警告：</strong>{{ alert.alert }}
+                  </div>
+                  <div>
+                    <a
+                      :href="`http://localhost:16532/${alert.video_file_name}`"
+                      target="_blank"
+                      rel="noopener"
+                    >查看视频</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </el-card>
+        </div>
       </div>
     </div>
-  </div>
-
-
-  <!-- 弹窗 -->
-   <el-dialog 
+    <!-- 弹窗部分也要放在这个div内 -->
+    <el-dialog 
       v-model="historyDialogVisible" 
       title="历史记录" 
       width="80%"
@@ -159,99 +155,81 @@
       class="history-dialog"
     >
       <div class="history-container">
-        <el-table :data="historyAlerts" height="500" style="background-color: transparent;">
+        <el-table :data="historyAlerts" style="background-color: transparent; height: 100%;">
           <el-table-column prop="time" label="时间" width="120" />
           <el-table-column prop="title" label="事件标题" width="200" />
           <el-table-column prop="drone" label="关联无人机" width="150" />
           <el-table-column prop="info" label="信息" />
         </el-table>
-        
-        <div class="history-pagination">
-          <el-pagination
-            background
-            layout="prev, pager, next"
-            :total="historyAlerts.length"
-            :page-size="10"
-          />
-        </div>
       </div>
     </el-dialog>
-
     <el-dialog 
-    v-model="alertDialogVisible" 
-    width="70%"
-    center
-    custom-class="alert-detail-dialog"
-  >
-    <div class="alert-detail-container">
-      <div class="alert-image">
-        <canvas
-          ref="bboxCanvas"
-          class="bbox-canvas"
-          :style="{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: imgWidth?  imgWidth + 'px' : '100%',
-          height: imgHeight ? imgHeight + 'px' : '100%',
-          pointerEvents: 'none'
-        }"
-        />
-        <img
-          :src="`http://localhost:16532/${currentAlert.picture_file_name}`"
-          ref="alertImg"
-          class="alert-img-full"
-          @load="drawBboxes"
-        />
-        
-      </div>
-      <div class="alert-content">
-        <div class="alert-meta">
-          <div class="meta-item">
-            <el-icon><Clock /></el-icon>
-            <span>时间: {{ currentAlert.time }}</span>
-          </div>
-          <div class="meta-item">
-            <el-icon><Connection /></el-icon>
-            <span>无人机: {{ currentAlert.uav_id || '未知' }}</span>
-          </div>
+      v-model="alertDialogVisible" 
+      width="70%"
+      center
+      custom-class="alert-detail-dialog"
+    >
+      <div class="alert-detail-container">
+        <div class="alert-image">
+          <canvas
+            ref="bboxCanvas"
+            class="bbox-canvas"
+            :style="{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none'
+          }"
+          />
+          <img
+            :src="`http://localhost:16532/${currentAlert.picture_file_name}`"
+            ref="alertImg"
+            class="alert-img-full"
+            @load="drawBboxes"
+          />
         </div>
-        <div class="alert-description">
-          <h3>事件描述</h3>
-          <div v-for="(descList, key) in currentAlert.mapping" :key="key">
-            <div
-              v-for="(desc, dIdx) in descList"
-              :key="dIdx"
-              :class="['desc-item', { active: activeKey === key }]"
-              @mouseenter="setActiveKey(key)"
-              @mouseleave="setActiveKey('')"
-              @click="setActiveKey(key)"
-              style="cursor:pointer;"
-            >
-              <strong>{{ key }}：</strong>{{ desc }}
+        <div class="alert-content">
+          <div class="alert-meta">
+            <div class="meta-item">
+              <!-- <el-icon><Clock /></el-icon> -->
+              <div>时间</div>
+              <span>{{ currentAlert.time }}</span>
+            </div>
+            <!-- <div class="meta-item">
+              <el-icon><Connection /></el-icon>
+              <span>无人机: {{ currentAlert.uav_id || '未知' }}</span>
+            </div> -->
+          </div>
+          <div class="alert-description">
+            <h3>事件详情</h3>
+            <div class="description-content-wrapper">
+              <div class="description-content" v-html="highlightedDescription" 
+                   @mouseover="handleMouseEnter" 
+                   @mouseout="handleMouseLeave"></div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </el-dialog>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount,watch,nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount,watch,nextTick, computed } from 'vue';
 import { 
   Warning, Position, Connection, 
-  VideoCamera, Location, Aim, 
-  DataLine, ArrowRight
+  VideoCamera, ArrowRight
 } from '@element-plus/icons-vue';
 import { getDroneData,getHistoryData,getWarningData } from '../js/api';
 
 // 无人机数据
 const drones = ref([
-  { id: 0, name: '侦察无人机-01', inonline:'normal',status: 'normal', location: '东经116.4°, 北纬39.9°', altitude: 1200, videoUrl: 'http://localhost:5000/video_feed' },
-  { id: 1, name: '测绘无人机-02', inonline:'normal',status: 'normal', location: '东经116.5°, 北纬39.8°', altitude: 800,videoUrl: 'http://localhost:5001/video_feed' },
-  { id: 2, name: '应急无人机-03', inonline:'normal',status: 'abnormal', location: '东经116.3°, 北纬40.0°', altitude: 1500, videoUrl: 'http://localhost:5002/video_feed' },
-  { id: 3, name: '巡逻无人机-04', inonline:'normal',status: 'normal', location: '东经116.6°, 北纬39.7°', altitude: 600, videoUrl: 'http://localhost:5003/video_feed' }
+  { id: 0, name: '侦察无人机-01', inonline:'abnormal',status: 'normal', location: '东经116.4°, 北纬39.9°', altitude: 1200, videoUrl: 'http://localhost:5000/video_feed' },
+  { id: 1, name: '测绘无人机-02', inonline:'abnormal',status: 'normal', location: '东经116.5°, 北纬39.8°', altitude: 800,videoUrl: 'http://localhost:5001/video_feed' },
+  { id: 2, name: '应急无人机-03', inonline:'abnormal',status: 'normal', location: '东经116.3°, 北纬40.0°', altitude: 1500, videoUrl: 'http://localhost:5002/video_feed' },
+  { id: 3, name: '巡逻无人机-04', inonline:'abnormal',status: 'normal', location: '东经116.6°, 北纬39.7°', altitude: 600, videoUrl: 'http://localhost:5003/video_feed' }
 ]);
 const selectedDrone = ref(drones.value[0]);
 
@@ -323,7 +301,7 @@ const alerts = ref<Array<{
   label_img_name: string;
   label_json_name: string;
   description: string;
-  bboxes: Array<{ label: string; bbox_2d: number[] }>;
+  bboxes: Array<{ class: string; bbox: number[] }>;
   mapping: Record<string, string[]>;
 }>>([]);
 
@@ -332,6 +310,7 @@ const updateAlerts = async () => {
   for (let i = 0; i < 4; i++) {
     try {
       const res = await getWarningData(i+1); // uav_id 从 1 开始
+      console.log('异常数据',res)
       if (res.warning_history && Array.isArray(res.warning_history)) {
         res.warning_history.forEach((item: { uav_id: string; time: string; info: any }) => {
           alerts.value.push({
@@ -349,7 +328,7 @@ const updateAlerts = async () => {
 
 // 更新 drones 状态
   drones.value.forEach(drone => {
-    if (abnormalUavIds.has(String(drone.id))) {
+    if (abnormalUavIds.has(String(drone.id+1))) {
       drone.status = 'abnormal'; // 或 '异常'
     } else {
       drone.status = 'normal'; // 或 '正常'
@@ -413,7 +392,7 @@ const currentAlert = ref<{
   label_img_name: string;
   label_json_name: string;
   description: string; 
-  bboxes: Array<{ label: string; bbox_2d: number[] }>;
+  bboxes: Array<{ class: string; bbox: number[] }>;
   mapping: Record<string, string[]>;
 }>({
   uav_id: '',
@@ -430,7 +409,17 @@ const currentAlert = ref<{
 const showAlertDialog = (alert: any) => {
   currentAlert.value = alert;
   alertDialogVisible.value = true;
-  drawBboxes(); // 绘制框
+  
+  // 等待DOM更新后初始化画布
+  nextTick(() => {
+    const img = alertImg.value;
+    const canvas = bboxCanvas.value;
+    if (img && canvas) {
+      // 初始化时不绘制任何标注框
+      activeKey.value = '';
+      drawBboxes();
+    }
+  });
 };
 
 const alertImg = ref<HTMLImageElement | null>(null);
@@ -439,47 +428,118 @@ const imgWidth = ref(0);
 const imgHeight = ref(0);
 const activeKey = ref('');
 
+// 计算高亮的事件描述
+const highlightedDescription = computed(() => {
+  if (!currentAlert.value.description) return '无详细描述';
+  
+  let description = currentAlert.value.description;
+  const mapping = currentAlert.value.mapping || {};
+  
+  // 为每个mapping中的类别创建高亮标记
+  Object.keys(mapping).forEach(key => {
+    const regex = new RegExp(key, 'g');
+    description = description.replace(regex, 
+      `<span class="highlightable-text" data-key="${key}">${key}</span>`
+    );
+  });
+  
+  return description;
+});
+
+// 处理鼠标悬停事件
+const handleMouseEnter = (event: MouseEvent) => {
+  const target = event.target as HTMLElement;
+  console.log('Mouse enter target:', target);
+  if (target.classList.contains('highlightable-text')) {
+    const key = target.dataset.key || '';
+    console.log('Setting active key to:', key);
+    setActiveKey(key);
+  }
+};
+
+const handleMouseLeave = () => {
+  setActiveKey('');
+};
+
 // 画框
-const drawBboxes = async () => {
-  await nextTick();
-  console.log("currentAlert", currentAlert.value);
+const drawBboxes = () => {
+  if (!bboxCanvas.value || !currentAlert.value) {
+    console.log('Canvas or currentAlert not available');
+    return;
+  }
+  
+  const ctx = bboxCanvas.value.getContext('2d');
+  if (!ctx) {
+    console.log('Canvas context not available');
+    return;
+  }
+  
   const img = alertImg.value;
-  const canvas = bboxCanvas.value;
-  if (!img || !canvas) return;
-  imgWidth.value = img.width;
-  imgHeight.value = img.height;
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // 计算缩放比例
-  const scaleX = img.width / img.naturalWidth;
-  const scaleY = img.height / img.naturalHeight;
-
-  (currentAlert.value.bboxes || []).forEach((box) => {
-    // 框格式为中心点x, y, 宽, 高（原始图片坐标）
-    const [cx, cy, w, h] = box.bbox_2d;
-    // 缩放到显示图片坐标
-    const scaledCx = cx * scaleX;
-    const scaledCy = cy * scaleY;
-    const scaledW = w * scaleX;
-    const scaledH = h * scaleY;
-    const x = scaledCx - scaledW / 2;
-    const y = scaledCy - scaledH / 2;
-    // 判断是否高亮
-    const isActive = activeKey.value && box.label === activeKey.value;
-    ctx.save();
-    ctx.strokeStyle = isActive ? '#ff6b6b' : '#4facfe';
-    ctx.lineWidth = isActive ? 4 : 2;
-    ctx.globalAlpha = isActive ? 1 : 0.7;
-    ctx.strokeRect(x, y, scaledW, scaledH);
-    // 标注类别
-    ctx.font = '18px Arial';
-    ctx.fillStyle = isActive ? '#ff6b6b' : '#4facfe';
-    ctx.fillText(box.label, x + 4, y + 20);
-    ctx.restore();
+  if (!img) {
+    console.log('Alert image not available');
+    return;
+  }
+  
+  // 确保画布尺寸与图片显示尺寸一致
+  const imgRect = img.getBoundingClientRect();
+  bboxCanvas.value.width = imgRect.width;
+  bboxCanvas.value.height = imgRect.height;
+  
+  console.log('Canvas size:', bboxCanvas.value.width, 'x', bboxCanvas.value.height);
+  console.log('Image rect size:', imgRect.width, 'x', imgRect.height);
+  console.log('Image natural size:', img.naturalWidth, 'x', img.naturalHeight);
+  
+  // 清除画布
+  ctx.clearRect(0, 0, bboxCanvas.value.width, bboxCanvas.value.height);
+  
+  // 如果没有激活的类别，不绘制任何标注框
+  if (!activeKey.value) {
+    console.log('No active key, not drawing boxes');
+    return;
+  }
+  
+  const bboxes = Array.isArray(currentAlert.value.bboxes) ? currentAlert.value.bboxes : [];
+  console.log('Active key:', activeKey.value, 'Bboxes:', bboxes);
+  
+  // 计算缩放比例 - 使用图片的实际显示尺寸
+  const scaleX = imgRect.width / img.naturalWidth;
+  const scaleY = imgRect.height / img.naturalHeight;
+  
+  bboxes.forEach((box) => {
+    // 只绘制与当前激活类别匹配的标注框
+    if (box.class === activeKey.value) {
+      console.log('Drawing box for class:', box.class, 'bbox:', box.bbox);
+      const [x1, y1, x2, y2] = box.bbox;
+      
+      // 缩放坐标
+      const scaledX1 = x1 * scaleX;
+      const scaledY1 = y1 * scaleY;
+      const scaledX2 = x2 * scaleX;
+      const scaledY2 = y2 * scaleY;
+      
+      const w = scaledX2 - scaledX1;
+      const h = scaledY2 - scaledY1;
+      
+      console.log('Scaled coordinates:', { scaledX1, scaledY1, w, h });
+      
+      // 绘制高亮标注框
+      ctx.strokeStyle = '#00FF00';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(scaledX1, scaledY1, w, h);
+      
+      // 绘制文字背景
+      ctx.font = '18px Arial';
+      const textWidth = ctx.measureText(box.class).width;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(scaledX1 + 4, scaledY1 - 20, textWidth + 8, 20);
+      
+      // 绘制文字
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(box.class, scaledX1 + 4, scaledY1 - 5);
+      ctx.fillStyle = '#00FF00';
+      ctx.fillText(box.class, scaledX1 + 4, scaledY1 - 5);
+    }
   });
 };
 
@@ -530,11 +590,28 @@ const handleJump = (index: number) => {
 // 更新视频统计信息
 
 // 初始化WebSocket连接
+let ws: WebSocket | null = null;
 const initWebSocket = () => {
-  // 这里模拟WebSocket连接，实际项目中替换为真实WebSocket连接
-  console.log("初始化WebSocket连接...");
-  
-
+  if (ws) {
+    ws.close();
+  }
+  ws = new WebSocket('ws://localhost:16532/alerts');
+  ws.onopen = () => {
+    console.log('WebSocket 连接已建立');
+  };
+  ws.onmessage = async () => {
+    // 每次收到消息，刷新异常和历史信息
+    await updateAlerts();
+    await updateHistory();
+  };
+  ws.onerror = (err) => {
+    console.error('WebSocket 发生错误:', err);
+  };
+  ws.onclose = () => {
+    console.log('WebSocket 连接已关闭');
+    // 可选：自动重连
+    setTimeout(initWebSocket, 3000);
+  };
 };
 const checkDroneOnline=(drone: { videoUrl: string }, callback: (online: boolean) => void)=>{
   const img = new Image();
@@ -579,6 +656,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   clearInterval(timer);
   clearInterval(droneFrameTimer);
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
 });
 </script>
 
@@ -636,6 +717,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  margin-top: 60px;
 }
 
 .selector-card {
@@ -795,6 +877,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   overflow: hidden;
   position: relative;
+  margin-top: 50px;
 }
 
 .video-stream {
@@ -828,6 +911,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden; /* ✅ 必加 */
+  margin-top: -50px;
 }
 
 .alert-card {
@@ -985,11 +1069,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 10px;
+  /* padding: px; */
+  margin-left: -8px;
 }
 
 .alert-meta {
-  display: grid;
+  /* display: grid; */
   grid-template-columns: 1fr 1fr;
   gap: 15px;
   background: rgba(184, 184, 184, 0.3);
@@ -998,23 +1083,23 @@ onBeforeUnmount(() => {
 }
 
 .meta-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  /* display: flex; */
+  /* align-items: center; */
+  gap: 1px;
   font-size: 14px;
 }
 
 .alert-description, .alert-analysis {
   background: rgba(185, 185, 185, 0.3);
-  padding: 15px;
-  border-radius: 8px;
+  padding: 2px;
+  border-radius: 5px;
 }
 
 .alert-description h3, .alert-analysis h3 {
   color: #64b3f4;
   font: 600 18px 'Segoe UI', sans-serif;
-  margin-top: 0;
-  margin-bottom: 10px;
+  margin-top: 5px;
+  margin-bottom: 5px;
 }
 .alert-description p, .alert-analysis p {
   color: #333;
@@ -1039,8 +1124,9 @@ onBeforeUnmount(() => {
 .history-container {
   display: flex; 
   flex-direction: column;
-  height: 70vh;
+  height: 80vh; /* 增加高度从70vh到80vh */
   background-color: transparent;
+  width: 100%; /* 确保宽度占满 */
 }
 
 .history-pagination {
@@ -1065,6 +1151,114 @@ onBeforeUnmount(() => {
 .desc-item.active {
   background: rgba(255, 107, 107, 0.15);
   color: #ff6b6b;
+}
+/* 高亮文本样式 */
+.highlightable-text {
+  color: #4facfe;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.highlightable-text:hover {
+  background: rgba(79, 172, 254, 0.2);
+  color: #ff6b6b;
+}
+
+.description-content-wrapper {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  /* padding: 0px; */
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.description-content {
+  line-height: 1.6;
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 滚动条样式 */
+.description-content-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.description-content-wrapper::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.description-content-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.description-content-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+.video-grid-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 30px;
+  width: 100%;
+  height: 80vh;
+}
+
+.video-grid-item {
+  background: rgba(0,0,0,0.7);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.video-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.video-grid-stream {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* 改为cover */
+  border-radius: 8px;
+  background: #222;
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+.video-grid-error {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #222;
+  border-radius: 8px;
 }
 /* canvas {
   background-color:#0f2027;

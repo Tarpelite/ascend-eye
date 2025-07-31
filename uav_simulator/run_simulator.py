@@ -49,7 +49,7 @@ video_source = None
 def load_uav_sim_data():
     """动态加载最新的仿真数据"""
     try:
-        with open("uav_simulator/DroneData/flight_data_all.json", "r", encoding="utf-8") as f:
+        with open("DroneData/flight_data_all.json", "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"[DEBUG] 主路径加载失败: {e}")
@@ -66,9 +66,10 @@ def load_uav_sim_data():
 # 移除全局数据加载，改为动态加载
 
 class HTTPVideoSimulator:
-    def __init__(self, video_path, port=5000):
+    def __init__(self, video_path, port=5000, video_type="test"):
         self.video_path = video_path
         self.port = port
+        self.video_type = video_type  # "test" 或 "label"
         self.video_capture = None
         self.lock = threading.Lock()
         self.frame_count = 0
@@ -90,7 +91,8 @@ class HTTPVideoSimulator:
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        print(f"[INFO] 视频信息:")
+        print(f"[INFO] {self.video_type}视频信息:")
+        print(f"  - 文件路径: {self.video_path}")
         print(f"  - 分辨率: {width}x{height}")
         print(f"  - FPS: {fps:.2f}")
         print(f"  - 总帧数: {total_frames}")
@@ -115,7 +117,7 @@ class HTTPVideoSimulator:
                     continue
                     
                 # 添加OSD信息
-                self.add_osd(frame)
+                # self.add_osd(frame)
                 
                 # 编码为JPEG
                 ret, buffer = cv2.imencode('.jpg', frame, 
@@ -131,15 +133,15 @@ class HTTPVideoSimulator:
             # 控制帧率
             time.sleep(frame_delay)
             
-    def add_osd(self, frame):
-        """添加OSD信息"""
-        if self.start_time:
-            elapsed = time.time() - self.start_time
-            fps = self.frame_count / elapsed if elapsed > 0 else 0
+    # def add_osd(self, frame):
+    #     """添加OSD信息"""
+    #     if self.start_time:
+    #         elapsed = time.time() - self.start_time
+    #         fps = self.frame_count / elapsed if elapsed > 0 else 0
             
-            text = f"HTTP Stream | FPS: {fps:.2f} | Frame: {self.frame_count}"
-            cv2.putText(frame, text, (10, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    #         text = f"HTTP Stream | FPS: {fps:.2f} | Frame: {self.frame_count}"
+    #         cv2.putText(frame, text, (10, 30), 
+    #                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
 
 def create_app(video_path, port):
@@ -154,10 +156,20 @@ def create_app(video_path, port):
         }
     })
     
-    video_source = HTTPVideoSimulator(video_path, port)
+    # 创建两个视频源：一个用于test_videos，一个用于label_video
+    test_video_source = HTTPVideoSimulator(video_path, port, "test")
+    
+    # 构建label_video路径
+    video_filename = os.path.basename(video_path)
+    label_video_path = os.path.join("label_video", video_filename)
+    label_video_source = HTTPVideoSimulator(label_video_path, port, "label")
 
-    if not video_source.validate_video():
-        print(f"[ERROR] 视频文件无效: {video_path}")
+    if not test_video_source.validate_video():
+        print(f"[ERROR] test视频文件无效: {video_path}")
+        sys.exit(1)
+        
+    if not label_video_source.validate_video():
+        print(f"[ERROR] label视频文件无效: {label_video_path}")
         sys.exit(1)
 
     @app.route('/')
@@ -172,13 +184,19 @@ def create_app(video_path, port):
             <div class="container">
                 <h1>🚁 Ascend-Eye HTTP视频流模拟器</h1>
                 <p class="status">✓ 服务器运行中</p>
-                <div class="video-container">
-                    <img src="{{ url_for('video_feed') }}" alt="Video Stream">
-                </div>
-                <div class="info">
-                    <h3>连接信息：</h3>
-                    <p><strong>视频流地址：</strong> <code>http://{{ request.host }}/video_feed</code></p>
-                    <p><strong>协议：</strong> HTTP Motion JPEG</p>
+                        <div class="video-container">
+            <h3>原始视频流</h3>
+            <img src="{{ url_for('video_feed') }}" alt="Video Stream">
+        </div>
+        <div class="video-container">
+            <h3>标注视频流</h3>
+            <img src="{{ url_for('label_video') }}" alt="Label Video Stream">
+        </div>
+        <div class="info">
+            <h3>连接信息：</h3>
+            <p><strong>原始视频流地址：</strong> <code>http://{{ request.host }}/video_feed</code></p>
+            <p><strong>标注视频流地址：</strong> <code>http://{{ request.host }}/label_video</code></p>
+            <p><strong>协议：</strong> HTTP Motion JPEG</p>
                     <h3>Python客户端示例：</h3>
                     <pre><code>import cv2\ncap = cv2.VideoCapture('http://{{ request.host }}/video_feed')\nwhile True:\n    ret, frame = cap.read()\n    if ret:\n        cv2.imshow('Stream', frame)\n        if cv2.waitKey(1) & 0xFF == ord('q'):\n            break</code></pre>
                 </div>
@@ -189,7 +207,11 @@ def create_app(video_path, port):
 
     @app.route('/video_feed')
     def video_feed():
-        return Response(video_source.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        return Response(test_video_source.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        
+    @app.route('/label_video')
+    def label_video():
+        return Response(label_video_source.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
     @app.route('/uav_data')
     def uav_data():
@@ -234,10 +256,16 @@ def run_multi_simulators(video_paths: List[str], ports: List[int]):
     for video_path, port in zip(video_paths, ports):
         def run_app(video_path=video_path, port=port):
             app = create_app(video_path, port)
+            # 构建label_video路径
+            video_filename = os.path.basename(video_path)
+            label_video_path = os.path.join("label_video", video_filename)
+            
             print(f"\n{'='*50}\nAscend-Eye HTTP视频流模拟器\n{'='*50}")
             print(f"[INFO] 视频源: {video_path}")
+            print(f"[INFO] 标注视频源: {label_video_path}")
             print(f"[INFO] 服务器地址: http://localhost:{port}")
-            print(f"[INFO] 视频流地址: http://localhost:{port}/video_feed")
+            print(f"[INFO] 原始视频流地址: http://localhost:{port}/video_feed")
+            print(f"[INFO] 标注视频流地址: http://localhost:{port}/label_video")
             print(f"[INFO] 无人机数据: http://localhost:{port}/uav_data")
             print(f"[INFO] 端口列表: http://localhost:{port}/uav_ports")
             print(f"[INFO] 刷新数据: http://localhost:{port}/refresh_data")
@@ -272,19 +300,43 @@ def main():
         if len(args.videos) != len(args.ports):
             print('[ERROR] 视频文件数量和端口数量必须一致')
             sys.exit(1)
-        run_multi_simulators(args.videos, args.ports)
+        
+        # 处理视频路径，如果只提供文件名，则自动添加test_videos前缀
+        processed_videos = []
+        for video_path in args.videos:
+            if os.path.dirname(video_path) == '':
+                # 只提供了文件名，添加test_videos前缀
+                processed_videos.append(os.path.join('test_videos', video_path))
+            else:
+                # 提供了完整路径，直接使用
+                processed_videos.append(video_path)
+        
+        run_multi_simulators(processed_videos, args.ports)
     # 默认支持4路流
     elif not (args.videos or args.ports) and not args.video:
+        # 构建默认视频路径，确保包含test_videos文件夹
         default_videos = [f'test_videos/test.mp4'] * 4
         default_ports = [5000, 5001, 5002, 5003]
         run_multi_simulators(default_videos, default_ports)
     # 兼容原有单路用法
     else:
-        app = create_app(args.video, args.port)
+        # 处理单路视频路径，如果只提供文件名，则自动添加test_videos前缀
+        video_path = args.video
+        if os.path.dirname(video_path) == '':
+            # 只提供了文件名，添加test_videos前缀
+            video_path = os.path.join('test_videos', video_path)
+        
+        app = create_app(video_path, args.port)
         print(f"\n{'='*50}\nAscend-Eye HTTP视频流模拟器\n{'='*50}")
-        print(f"[INFO] 视频源: {args.video}")
+        # 构建label_video路径
+        video_filename = os.path.basename(video_path)
+        label_video_path = os.path.join("label_video", video_filename)
+        
+        print(f"[INFO] 视频源: {video_path}")
+        print(f"[INFO] 标注视频源: {label_video_path}")
         print(f"[INFO] 服务器地址: http://localhost:{args.port}")
-        print(f"[INFO] 视频流地址: http://localhost:{args.port}/video_feed")
+        print(f"[INFO] 原始视频流地址: http://localhost:{args.port}/video_feed")
+        print(f"[INFO] 标注视频流地址: http://localhost:{args.port}/label_video")
         print(f"[INFO] 无人机数据: http://localhost:{args.port}/uav_data")
         print(f"[INFO] 端口列表: http://localhost:{args.port}/uav_ports")
         print(f"[INFO] 刷新数据: http://localhost:{args.port}/refresh_data")
