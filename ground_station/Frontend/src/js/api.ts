@@ -36,3 +36,9 @@ export const getWarningData = async(droneId:number)=>{
         throw error;
     }
 }
+
+export const getIRVideoUrl = (droneId: number): string => {
+    // 根据无人机ID生成红外视频流URL
+    const port = 5000 + droneId;
+    return `http://localhost:${port}/IR_feed`;
+}

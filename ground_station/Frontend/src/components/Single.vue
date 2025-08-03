@@ -45,7 +45,7 @@
               </div>
               <div class="drone-info">
                 <el-button type="primary" class="mode-switch-btn" @click="changeMode">
-                  {{ isDetectionMode ? '切换直播模式' : '切换检测模式' }}
+                  {{ getNextModeDisplayName() }}
                 </el-button>
               </div>
           </div>
@@ -56,7 +56,7 @@
           <div class="video-header">
             <div class="video-title">
               <el-icon><VideoCamera /></el-icon>
-              <span>{{ selectedDrone.name }} - {{ isDetectionMode ? '检测视频流' : '实时视频流' }}</span>
+              <span>{{ selectedDrone.name }} - {{ getModeDisplayName() }}</span>
             </div>
           </div>
           
@@ -64,24 +64,37 @@
           <div class="video-display">
             <!-- 直播模式视频流 -->
             <img 
-              v-show="!isDetectionMode"
+              v-show="videoMode === 'live'"
               :src="videoUrl" 
               alt="无人机实时视频流"
               class="video-stream"
             />
             <!-- 检测模式视频流 -->
             <img
-              v-show="isDetectionMode"
+              v-show="videoMode === 'detection'"
               :src="videoUrlOfYolo"
               alt="无人机检测视频流"
               class="video-stream"
               />
+            <!-- 红外模式视频流 -->
+            <img
+              v-show="videoMode === 'ir'"
+              :src="videoUrlOfIR"
+              alt="无人机红外视频流"
+              class="video-stream"
+              />
             
-            <!-- 隐藏的检测模式视频流，用于保持同步播放 -->
+            <!-- 隐藏的视频流，用于保持同步播放 -->
             <img
               v-show="false"
               :src="videoUrlOfYolo"
               alt="隐藏的检测视频流"
+              class="hidden-video-stream"
+              />
+            <img
+              v-show="false"
+              :src="videoUrlOfIR"
+              alt="隐藏的红外视频流"
               class="hidden-video-stream"
               />
             
@@ -211,7 +224,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount,nextTick, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { getDroneData,getWarningData,getHistoryData} from '../js/api';
+import { getDroneData,getWarningData,getHistoryData,getIRVideoUrl} from '../js/api';
 const route = useRoute();
 
 const droneId = ref(0);
@@ -238,9 +251,10 @@ const fetchDroneFrames = async () => {
     frameIndex.value = 0;
     updateCurrentDroneFrame();
     
-    // 更新视频流URL，两个视频流同时更新
+    // 更新视频流URL，三个视频流同时更新
     videoUrl.value = drones.value[droneId.value].videoUrl;
     videoUrlOfYolo.value = `http://localhost:${5000 + droneId.value}/label_video`;
+    videoUrlOfIR.value = getIRVideoUrl(droneId.value);
   } catch (e) {
     droneFrames.value = [];
     frameIndex.value = 0;
@@ -296,6 +310,9 @@ const videoUrl = ref('');
 
 // 检测模式视频流
 const videoUrlOfYolo = ref('');
+
+// 红外模式视频流
+const videoUrlOfIR = ref('');
 
 
 // 异常信息
@@ -546,12 +563,40 @@ const setActiveKey = (key: string) => {
 };
 
 const showBox = ref(true); // 控制异常信息显示/隐藏
-const isDetectionMode = ref(false); // 控制检测模式/直播模式
+// 视频显示模式：'live'(直播)、'detection'(检测)、'ir'(红外)
+const videoMode = ref<'live' | 'detection' | 'ir'>('live');
 
 const changeMode = () => {
-  isDetectionMode.value = !isDetectionMode.value;
-  // 两个视频流同时播放，切换时只是显示不同的结果
+  // 循环切换三种模式：直播 -> 检测 -> 红外 -> 直播
+  if (videoMode.value === 'live') {
+    videoMode.value = 'detection';
+  } else if (videoMode.value === 'detection') {
+    videoMode.value = 'ir';
+  } else {
+    videoMode.value = 'live';
+  }
+  // 三个视频流同时播放，切换时只是显示不同的结果
   // 不会重新开始播放，保持播放进度同步
+};
+
+// 计算当前模式显示名称
+const getModeDisplayName = () => {
+  switch (videoMode.value) {
+    case 'live': return '实时直播模式';
+    case 'detection': return '检测识别模式';
+    case 'ir': return '红外热成像模式';
+    default: return '实时直播模式';
+  }
+};
+
+// 计算下一个模式显示名称
+const getNextModeDisplayName = () => {
+  switch (videoMode.value) {
+    case 'live': return '切换检测模式';
+    case 'detection': return '切换红外模式';
+    case 'ir': return '切换直播模式';
+    default: return '切换检测模式';
+  }
 };
 
 let ws: WebSocket | null = null;
@@ -602,8 +647,9 @@ const checkDroneOnline=(drone: { videoUrl: string }, callback: (online: boolean)
 onMounted(async () => {
   droneId.value = Number(Array.isArray(route.params.id) ? route.params.id[0] : route.params.id);
   videoUrl.value = drones.value[droneId.value].videoUrl;
-  // 初始化检测模式视频流URL，两个视频流同时开始播放
+  // 初始化检测模式和红外模式视频流URL，三个视频流同时开始播放
   videoUrlOfYolo.value = `http://localhost:${5000 + droneId.value}/label_video`;
+  videoUrlOfIR.value = getIRVideoUrl(droneId.value);
   await fetchDroneFrames();
   await updateAlerts();
   await updateHistory();
