@@ -69,7 +69,7 @@ class HTTPVideoSimulator:
     def __init__(self, video_path, port=5000, video_type="test"):
         self.video_path = video_path
         self.port = port
-        self.video_type = video_type  # "test" 或 "label"
+        self.video_type = video_type  # "test", "label", 或 "ir"
         self.video_capture = None
         self.lock = threading.Lock()
         self.frame_count = 0
@@ -116,11 +116,11 @@ class HTTPVideoSimulator:
                     self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     continue
                     
-                # 添加OSD信息
-                # self.add_osd(frame)
+                # 根据视频类型进行不同处理
+                processed_frame = self.process_frame(frame)
                 
                 # 编码为JPEG
-                ret, buffer = cv2.imencode('.jpg', frame, 
+                ret, buffer = cv2.imencode('.jpg', processed_frame, 
                     [cv2.IMWRITE_JPEG_QUALITY, 80])
                 frame_data = buffer.tobytes()
                 
@@ -132,6 +132,17 @@ class HTTPVideoSimulator:
                    
             # 控制帧率
             time.sleep(frame_delay)
+            
+    def process_frame(self, frame):
+        """根据视频类型处理帧"""
+        if self.video_type == "ir":
+            # 红外视频处理：转为灰度图并应用伪彩色映射
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            infrared_frame = cv2.applyColorMap(gray, cv2.COLORMAP_JET)
+            return infrared_frame
+        else:
+            # 默认情况（test 或 label）：返回原始帧
+            return frame
             
     # def add_osd(self, frame):
     #     """添加OSD信息"""
@@ -156,13 +167,16 @@ def create_app(video_path, port):
         }
     })
     
-    # 创建两个视频源：一个用于test_videos，一个用于label_video
+    # 创建三个视频源：test、label 和红外
     test_video_source = HTTPVideoSimulator(video_path, port, "test")
     
     # 构建label_video路径
     video_filename = os.path.basename(video_path)
     label_video_path = os.path.join("label_video", video_filename)
     label_video_source = HTTPVideoSimulator(label_video_path, port, "label")
+    
+    # 红外视频源使用原始test视频，但进行红外处理
+    ir_video_source = HTTPVideoSimulator(video_path, port, "ir")
 
     if not test_video_source.validate_video():
         print(f"[ERROR] test视频文件无效: {video_path}")
@@ -170,6 +184,10 @@ def create_app(video_path, port):
         
     if not label_video_source.validate_video():
         print(f"[ERROR] label视频文件无效: {label_video_path}")
+        sys.exit(1)
+        
+    if not ir_video_source.validate_video():
+        print(f"[ERROR] 红外视频文件无效: {video_path}")
         sys.exit(1)
 
     @app.route('/')
@@ -192,10 +210,15 @@ def create_app(video_path, port):
             <h3>标注视频流</h3>
             <img src="{{ url_for('label_video') }}" alt="Label Video Stream">
         </div>
+        <div class="video-container">
+            <h3>红外视频流</h3>
+            <img src="{{ url_for('ir_feed') }}" alt="IR Video Stream">
+        </div>
         <div class="info">
             <h3>连接信息：</h3>
             <p><strong>原始视频流地址：</strong> <code>http://{{ request.host }}/video_feed</code></p>
             <p><strong>标注视频流地址：</strong> <code>http://{{ request.host }}/label_video</code></p>
+            <p><strong>红外视频流地址：</strong> <code>http://{{ request.host }}/IR_feed</code></p>
             <p><strong>协议：</strong> HTTP Motion JPEG</p>
                     <h3>Python客户端示例：</h3>
                     <pre><code>import cv2\ncap = cv2.VideoCapture('http://{{ request.host }}/video_feed')\nwhile True:\n    ret, frame = cap.read()\n    if ret:\n        cv2.imshow('Stream', frame)\n        if cv2.waitKey(1) & 0xFF == ord('q'):\n            break</code></pre>
@@ -212,6 +235,10 @@ def create_app(video_path, port):
     @app.route('/label_video')
     def label_video():
         return Response(label_video_source.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        
+    @app.route('/IR_feed')
+    def ir_feed():
+        return Response(ir_video_source.generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
     @app.route('/uav_data')
     def uav_data():
@@ -266,6 +293,7 @@ def run_multi_simulators(video_paths: List[str], ports: List[int]):
             print(f"[INFO] 服务器地址: http://localhost:{port}")
             print(f"[INFO] 原始视频流地址: http://localhost:{port}/video_feed")
             print(f"[INFO] 标注视频流地址: http://localhost:{port}/label_video")
+            print(f"[INFO] 红外视频流地址: http://localhost:{port}/IR_feed")
             print(f"[INFO] 无人机数据: http://localhost:{port}/uav_data")
             print(f"[INFO] 端口列表: http://localhost:{port}/uav_ports")
             print(f"[INFO] 刷新数据: http://localhost:{port}/refresh_data")
@@ -337,6 +365,7 @@ def main():
         print(f"[INFO] 服务器地址: http://localhost:{args.port}")
         print(f"[INFO] 原始视频流地址: http://localhost:{args.port}/video_feed")
         print(f"[INFO] 标注视频流地址: http://localhost:{args.port}/label_video")
+        print(f"[INFO] 红外视频流地址: http://localhost:{args.port}/IR_feed")
         print(f"[INFO] 无人机数据: http://localhost:{args.port}/uav_data")
         print(f"[INFO] 端口列表: http://localhost:{args.port}/uav_ports")
         print(f"[INFO] 刷新数据: http://localhost:{args.port}/refresh_data")
